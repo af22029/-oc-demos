@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# generated / downloaded caches
+**/mnist_cache/
+歌声合成デモ/web/cache/
+歌声合成デモ/data/PJS_corpus_ver1.1/
+歌声合成デモ/data/PJS_corpus_ver1.1.zip
+
+# OS
+.DS_Store
+Thumbs.db

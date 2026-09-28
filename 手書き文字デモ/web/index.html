@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文字ミキサー</title>
+<style>
+  :root{--bg:#12151b;--panel:#1b1f28;--line:#2c323f;--fg:#e9edf5;--sub:#9aa6bb;--accent:#7ee787;--accent2:#ffb86b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:"Segoe UI","Yu Gothic UI",sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--line)}
+  h1{margin:0;font-size:30px}
+  header p{margin:6px 0 0;color:var(--sub);font-size:18px}
+  .tabs{display:flex;gap:8px;padding:12px 24px 0}
+  .tabs button{background:var(--panel);color:var(--sub);border:1px solid var(--line);border-bottom:none;
+    padding:12px 22px;border-radius:8px 8px 0 0;font-size:19px;cursor:pointer}
+  .tabs button.on{color:var(--fg);background:#232936;border-color:var(--accent)}
+  .page{display:none;padding:20px 24px 40px;border-top:1px solid var(--line)}
+  .page.on{display:block}
+  .wrap{display:flex;gap:24px;flex-wrap:wrap}
+  .wrap.two,.wrap.three{flex-wrap:nowrap;align-items:flex-start}
+  .wrap.two .side{min-width:0;flex:1 1 320px}
+  .wrap.two canvas,.wrap.three canvas{max-width:100%;height:auto}
+  @media (max-width:1000px){.wrap.two{flex-wrap:wrap}.wrap.two .side{min-width:320px}}
+  .wrap.three .side{min-width:0;flex:0 1 auto}
+  @media (max-width:1200px){.wrap.three{flex-wrap:wrap}}
+  canvas{background:#0d1015;border:1px solid var(--line);border-radius:10px;touch-action:none}
+  #map{cursor:crosshair}
+  #pad{cursor:crosshair;background:#000}
+  .side{min-width:340px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .card h2{margin:0 0 10px;font-size:19px;color:var(--accent)}
+  .hint{color:var(--sub);font-size:17px;line-height:1.75}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  button{background:var(--accent);color:#0d1015;border:0;border-radius:8px;padding:12px 22px;
+    font-size:18px;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;color:var(--sub);border:1px solid var(--line)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:16px;margin-top:8px;color:var(--sub)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+  .kv{display:flex;justify-content:space-between;font-size:18px;padding:6px 0;border-bottom:1px dashed var(--line)}
+  .verdict{font-size:88px;font-weight:800;color:var(--accent2);line-height:1.1}
+  .bar{height:8px;background:#0d1015;border-radius:4px;overflow:hidden;margin-top:4px}
+  .bar div{height:100%;background:var(--accent)}
+  .load{padding:40px;color:var(--sub)}
+  small.cap{color:var(--sub);font-size:16px;display:block;text-align:center;margin-top:4px}
+  .zoombar{position:fixed;top:10px;right:14px;display:flex;gap:6px;align-items:center;z-index:99}
+  .zoombar button{background:var(--panel);color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:6px 12px;font-size:16px;font-weight:700;cursor:pointer}
+  .zoombar span{color:var(--sub);font-size:13px;min-width:44px;text-align:center}
+</style>
+</head>
+<body>
+<div class="zoombar">
+  <button id="zout" title="小さく">A－</button><span id="zval">100%</span><button id="zin" title="大きく">A＋</button>
+</div>
+<header>
+  <h1>文字ミキサー — 手書き数字の「地図」</h1>
+  <p>芝浦工業大学 武藤研究室 / VAE（変分オートエンコーダ）の体験デモ</p>
+</header>
+
+<div class="tabs">
+  <button id="tab1" class="on">① 文字の地図</button>
+  <button id="tab2">② 自分の字を置く</button>
+  <button id="tab3">③ モーフィング</button>
+  <button id="tab4">④ しくみ</button>
+</div>
+
+<div id="loading" class="load">モデル読み込み中…</div>
+
+<!-- ① 地図 -->
+<section id="p1" class="page">
+  <div class="wrap two">
+    <div>
+      <canvas id="map" width="640" height="640"></canvas>
+      <div class="hint">背景＝その場所の文字（AIがその場で生成）／ 点＝本物の手書き数字。クリック・ドラッグで動かせます。</div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="side">
+      <div class="card">
+        <h2>いま選んでいる場所の文字</h2>
+        <div class="row">
+          <canvas id="big" width="260" height="260"></canvas>
+          <div>
+            <div class="kv"><span>地図の座標</span><span id="zpos">—</span></div>
+            <div class="kv"><span>AIの判定</span><span id="guess">—</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card hint">
+        AIは手書き数字を <b>8個の数字</b> に圧縮して覚えています。8次元の空間は絵に描けないので、
+        そこに <b>1枚の平らな面を差し込んで、その切り口だけ</b> を見ているのがこの地図です。
+        背景の文字は、その面の上の点をそのままデコーダに通した本物の出力です。
+        <br>数字と数字の境目をクリックすると、<b>どの数字でもない文字</b>が現れます。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ② 手書き -->
+<section id="p2" class="page">
+  <div class="wrap three">
+    <div class="side">
+      <div class="card">
+        <h2>① ここに数字を1つ書く</h2>
+        <canvas id="pad" width="340" height="340"></canvas>
+        <div class="row" style="margin-top:10px">
+          <button id="send">AIに見せる</button>
+          <button class="ghost" id="clear">消す</button>
+        </div>
+        <p class="hint">大きく、はっきり書いてください。MNIST と同じ規格
+          （重心を中央に・20×20 に収める・線の濃さを揃える）に自動で整えられます。</p>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>② 地図のどこに落ちた？</h2>
+        <canvas id="map2" width="340" height="340"></canvas>
+        <p class="hint">★ ＝ あなたの字の位置。本当は8次元にいるので、地図の面に落とした<b>影</b>だと思ってください。
+          判定は影ではなく、8次元のままの位置で行っています。</p>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>③ AIの答え</h2>
+        <div class="row" style="align-items:flex-start">
+          <div class="verdict" id="verdict">—</div>
+          <div style="flex:1;min-width:150px">
+            <div id="ranks"></div>
+          </div>
+        </div>
+        <div class="hint" id="conf">まわりにある本物データから判定します</div>
+      </div>
+      <div class="card">
+        <h2>AIの目に映ったあなたの字</h2>
+        <div class="row">
+          <div><canvas id="norm" width="150" height="150"></canvas><small class="cap">整えた入力</small></div>
+          <div><canvas id="recon" width="150" height="150"></canvas><small class="cap">AIの復元</small></div>
+        </div>
+        <p class="hint">右がぼやけていたら、8個の数字にうまく圧縮できなかったということ。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ③ モーフィング -->
+<section id="p3" class="page">
+  <div class="wrap">
+    <div class="side">
+      <div class="card">
+        <h2>数字から数字へ、なめらかに変える</h2>
+        <div class="row">
+          <label class="hint">左：<select id="selA"></select></label>
+          <label class="hint">右：<select id="selB"></select></label>
+        </div>
+        <input id="slider" type="range" min="0" max="100" value="0" style="width:100%;margin-top:14px">
+        <p class="hint">途中の形は <b>どちらの数字でもない、この世に存在しない文字</b>。
+          それでも「文字らしさ」が保たれるのが、AIが地図を持っている証拠です。</p>
+      </div>
+    </div>
+    <div class="side">
+      <canvas id="morph" width="340" height="340"></canvas>
+      <small class="cap"><span id="mt">0</span>%</small>
+    </div>
+    <div class="side">
+      <canvas id="strip" width="560" height="80"></canvas>
+      <small class="cap">変化のようす（左端→右端）</small>
+    </div>
+  </div>
+</section>
+
+<!-- ④ しくみ -->
+<section id="p4" class="page">
+  <div class="card hint" style="max-width:800px">
+    <h2>このデモのしくみ</h2>
+    <p>① 手書き数字の画像（28×28＝<b>784個の数字</b>）を、AI（エンコーダ）が <b>8個の数字</b> に圧縮します。<br>
+       ② 別のAI（デコーダ）が、その8個の数字から元の画像を復元できるように、同時に訓練されます。<br>
+       ③ 訓練が終わると、8個の数字は「意味のある地図」になります。近い場所には似た文字、遠い場所には違う文字。<br>
+       ④ 地図の好きな場所を選べば、<b>誰も書いていない文字</b>をAIが作り出せます。</p>
+    <div class="kv"><span>圧縮率</span><span>784 → 8（98.98% 削減）</span></div>
+    <div class="kv"><span>学習データ</span><span>MNIST 手書き数字 60,000枚</span></div>
+    <div class="kv"><span>判定の正答率（実測）</span><span id="accv">—</span></div>
+    <div class="kv"><span>地図が表す情報量</span><span id="varv">—</span></div>
+    <p style="margin-top:14px">正答率が100%でないのは、AIが<b>「これは何の数字か」を教わっていない</b>からです。
+      正解ラベルを一切見ずに、画像だけを見て「似ているもの同士を近くに置く」ことを自力で学んでいます（教師なし学習）。
+      それでも9割当たるのは、数字の形そのものに構造があるということです。</p>
+    <h2 style="margin-top:22px">この地図は何を見せているのか</h2>
+    <p>AIが使っているのは<b>8次元</b>の空間です。8次元はそのままでは描けないので、その中に
+       <b>1枚の平らな面</b>（原点を通り、データのばらつきが最も大きい2方向で張った面＝主成分分析）を差し込み、
+       その面の上だけを地図にしています。地図の座標 (a, b) は
+       <b>z = 中心 + a×方向1 + b×方向2</b> という8次元のベクトルで、
+       背景の文字はそれをデコーダに通した本物の出力です。ごまかしはありません。</p>
+    <p>いっぽう<b>点（本物のデータ）と★（あなたの字）は、面の上に乗っているとは限りません</b>。
+       残り6方向のぶんだけ面から浮いていて、地図にはその<b>影</b>が描かれています。
+       だから「見た目は他の数字の点に近いのに、判定は違う」ということが起こります。
+       <b>判定は影ではなく、8次元のままの位置</b>で行っています。</p>
+
+    <h2 style="margin-top:22px">手書き文字はどうやって判別している？</h2>
+    <p>じつは<b>「文字を当てる」ための学習は一切していません</b>。手順はこうです。</p>
+    <p>① 書いた字を MNIST と同じ形式に整える（重心を中央へ・20×20 に収める・線の濃さを揃える）→
+       ② エンコーダが8個の数字に圧縮する →
+       ③ その8次元の場所から<b>いちばん近い本物のデータ15個</b>を探す →
+       ④ その15個に付いている正解ラベルの<b>多数決</b>をとる。</p>
+    <p>つまり判別しているのは「AIが似ていると思う場所に、どの数字が集まっていたか」です。
+       AIは形の似ているものを近くに置いただけで、それが何の数字かは知りません。
+       それでも91%当たるということは、<b>似ている＝同じ数字</b>がほぼ成り立っている、
+       つまりAIの作った地図が正しいということです。</p>
+    <p class="hint">※ このデモと同じ仕組みを、セミの鳴き声のスペクトログラムに適用したのが「蝉ミキサー」です。</p>
+  </div>
+</section>
+
+<script src="data/mnist_vae.js"></script>
+<script>
+// ── 重みの復号 ───────────────────────────────────────────────
+function unb64(s){
+  const bin = atob(s), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Float32Array(u8.buffer);
+}
+const M = window.MNIST, ZD = M.arch.zdim;
+const L = {};
+for (const k in M.weights)
+  L[k] = {w: unb64(M.weights[k].w), b: unb64(M.weights[k].b),
+          out: M.weights[k].shape[0], in: M.weights[k].shape[1]};
+
+function dense(x, l, act){
+  const y = new Float32Array(l.out);
+  for (let o = 0; o < l.out; o++){
+    let s = l.b[o]; const base = o * l.in;
+    for (let i = 0; i < l.in; i++) s += l.w[base + i] * x[i];
+    if (act === 'relu') s = s > 0 ? s : 0;
+    else if (act === 'sig') s = 1 / (1 + Math.exp(-s));
+    y[o] = s;
+  }
+  return y;
+}
+const decode = z => dense(dense(dense(Float32Array.from(z), L.d1, 'relu'), L.d2, 'relu'), L.d3, 'sig');
+const encode = x => dense(dense(dense(x, L.e1, 'relu'), L.e2, 'relu'), L.mu);
+
+// ── 地図の平面：z = mean + a*pc1 + b*pc2 ───────────────────────
+const PM = M.pca.mean, C0 = M.pca.comps[0], C1 = M.pca.comps[1], R = M.range;
+function planeZ(a, b){
+  const z = new Float32Array(ZD);
+  for (let i = 0; i < ZD; i++) z[i] = PM[i] + a * C0[i] + b * C1[i];
+  return z;
+}
+function project(z){            // 8次元 → 地図の (a, b)
+  let a = 0, b = 0;
+  for (let i = 0; i < ZD; i++){ const d = z[i] - PM[i]; a += d * C0[i]; b += d * C1[i]; }
+  return [a, b];
+}
+// 実データ（判定用）
+const SZ = unb64(M.scatter.z), SY = M.scatter.y, SN = M.scatter.n;
+const SP = [];
+for (let i = 0; i < SN; i++) SP.push(project(SZ.subarray(i * ZD, i * ZD + ZD)));
+
+function knn(z, k){             // 8次元空間で k 近傍の多数決
+  const d = [];
+  for (let i = 0; i < SN; i++){
+    let s = 0;
+    for (let j = 0; j < ZD; j++){ const t = z[j] - SZ[i * ZD + j]; s += t * t; }
+    d.push([s, SY[i]]);
+  }
+  d.sort((p, q) => p[0] - q[0]);
+  const cnt = new Array(10).fill(0);
+  for (let i = 0; i < k; i++) cnt[d[i][1]]++;
+  return cnt.map((c, i) => [i, c / k]).sort((p, q) => q[1] - p[1]);
+}
+
+const COL = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231',
+             '#911eb4','#42d4f4','#f032e6','#bfef45','#fabed4'];
+
+// ── 地図の描画（2枚のcanvasで共用）──────────────────────────
+const GRID = 20;
+const bg = document.createElement('canvas'); bg.width = bg.height = GRID * 28;
+function buildBackground(){
+  const g = bg.getContext('2d'), img = g.createImageData(GRID * 28, GRID * 28);
+  for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++){
+    const a = R.lo[0] + (gx + 0.5) / GRID * (R.hi[0] - R.lo[0]);
+    const b = R.hi[1] - (gy + 0.5) / GRID * (R.hi[1] - R.lo[1]);
+    const out = decode(planeZ(a, b));
+    for (let r = 0; r < 28; r++) for (let c = 0; c < 28; c++){
+      const v = out[r * 28 + c] * 145, p = ((gy * 28 + r) * GRID * 28 + gx * 28 + c) * 4;
+      img.data[p] = img.data[p + 1] = img.data[p + 2] = v; img.data[p + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+function mapper(cv){
+  const cx = cv.getContext('2d'), PAD = 22, W = cv.width, H = cv.height;
+  return {
+    cx: cx, PAD: PAD,
+    px: v => PAD + (v - R.lo[0]) / (R.hi[0] - R.lo[0]) * (W - PAD * 2),
+    py: v => H - PAD - (v - R.lo[1]) / (R.hi[1] - R.lo[1]) * (H - PAD * 2),
+    ux: p => R.lo[0] + (p - PAD) / (W - PAD * 2) * (R.hi[0] - R.lo[0]),
+    uy: p => R.lo[1] + (H - PAD - p) / (H - PAD * 2) * (R.hi[1] - R.lo[1]),
+    W: W, H: H
+  };
+}
+function drawMap(m, sel, star){
+  const cx = m.cx;
+  cx.fillStyle = '#0d1015'; cx.fillRect(0, 0, m.W, m.H);
+  cx.globalAlpha = 0.8;
+  cx.drawImage(bg, m.PAD, m.PAD, m.W - m.PAD * 2, m.H - m.PAD * 2);
+  cx.globalAlpha = 0.5;
+  for (let i = 0; i < SN; i += 1){
+    cx.fillStyle = COL[SY[i]];
+    cx.beginPath(); cx.arc(m.px(SP[i][0]), m.py(SP[i][1]), 1.8, 0, 7); cx.fill();
+  }
+  cx.globalAlpha = 1;
+  if (sel){
+    cx.strokeStyle = '#7ee787'; cx.lineWidth = 2;
+    cx.beginPath(); cx.arc(m.px(sel[0]), m.py(sel[1]), 9, 0, 7); cx.stroke();
+  }
+  if (star){
+    cx.fillStyle = '#ffb86b'; cx.strokeStyle = '#12151b'; cx.lineWidth = 3;
+    cx.font = 'bold 40px serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.strokeText('★', m.px(star[0]), m.py(star[1]));
+    cx.fillText('★', m.px(star[0]), m.py(star[1]));
+  }
+}
+function showDigit(canvas, out){
+  const g = canvas.getContext('2d');
+  const tmp = document.createElement('canvas'); tmp.width = tmp.height = 28;
+  const tg = tmp.getContext('2d'), im = tg.createImageData(28, 28);
+  for (let i = 0; i < 784; i++){
+    const v = out[i] * 255;
+    im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255;
+  }
+  tg.putImageData(im, 0, 0);
+  g.imageSmoothingEnabled = true;
+  g.clearRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+}
+
+// ── ① 地図タブ ─────────────────────────────────────────────
+const m1 = mapper(document.getElementById('map'));
+let sel1 = null;
+function pick(ev){
+  const cv = document.getElementById('map'), r = cv.getBoundingClientRect();
+  const a = m1.ux((ev.clientX - r.left) * cv.width / r.width);
+  const b = m1.uy((ev.clientY - r.top) * cv.height / r.height);
+  sel1 = [a, b];
+  const z = planeZ(a, b);
+  drawMap(m1, sel1, null);
+  showDigit(document.getElementById('big'), decode(z));
+  document.getElementById('zpos').textContent = '(' + a.toFixed(2) + ', ' + b.toFixed(2) + ')';
+  const top = knn(z, 15)[0];
+  document.getElementById('guess').textContent =
+    top[1] < 0.4 ? 'どの数字とも言えない場所' : top[0] + ' の領域（' + Math.round(top[1] * 100) + '%）';
+}
+document.getElementById('map').addEventListener('pointerdown', pick);
+document.getElementById('map').addEventListener('pointermove', e => { if (e.buttons) pick(e); });
+
+// ── ② 手書きパッド ──────────────────────────────────────────
+const pad = document.getElementById('pad'), pctx = pad.getContext('2d');
+function clearPad(){ pctx.fillStyle = '#000'; pctx.fillRect(0, 0, pad.width, pad.height); }
+clearPad();
+let drawing = false;
+pad.addEventListener('pointerdown', e => { drawing = true; stroke(e, true); });
+pad.addEventListener('pointermove', e => { if (drawing) stroke(e, false); });
+addEventListener('pointerup', () => { drawing = false; });
+function stroke(e, start){
+  const r = pad.getBoundingClientRect();
+  const x = (e.clientX - r.left) * pad.width / r.width;
+  const y = (e.clientY - r.top) * pad.height / r.height;
+  pctx.lineWidth = 28; pctx.lineCap = 'round'; pctx.lineJoin = 'round'; pctx.strokeStyle = '#fff';
+  if (start){ pctx.beginPath(); pctx.moveTo(x - 0.01, y); }
+  pctx.lineTo(x, y); pctx.stroke();
+}
+
+// MNIST と同じ規格に整える：
+//   1. 描いた部分を切り出し、長辺 20px に収める（縦横比は保つ）
+//   2. 3x3 ぼかしでアンチエイリアスを MNIST に寄せる
+//   3. 明るさのガンマ補正で「インク量」を MNIST 平均(0.1307)に合わせる＝線の太さの正規化
+//   4. 重心を (14, 14) に平行移動
+const INK_TARGET = 0.1307;
+function preprocess(){
+  const s = pad.width, d = pctx.getImageData(0, 0, s, s).data;
+  let minx = s, miny = s, maxx = -1, maxy = -1;
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++)
+    if (d[(y * s + x) * 4] > 40){
+      if (x < minx) minx = x; if (x > maxx) maxx = x;
+      if (y < miny) miny = y; if (y > maxy) maxy = y;
+    }
+  if (maxx < 0) return null;
+  const bw = maxx - minx + 1, bh = maxy - miny + 1;
+  const scale = 20 / Math.max(bw, bh);
+  const w = bw * scale, h = bh * scale;
+
+  const t = document.createElement('canvas'); t.width = t.height = 28;
+  const g = t.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 28, 28);
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  g.drawImage(pad, minx, miny, bw, bh, (28 - w) / 2, (28 - h) / 2, w, h);
+
+  let px = new Float32Array(784);
+  const im = g.getImageData(0, 0, 28, 28).data;
+  for (let i = 0; i < 784; i++) px[i] = im[i * 4] / 255;
+
+  // 3x3 ぼかし
+  const bl = new Float32Array(784);
+  const K = [1, 2, 1, 2, 4, 2, 1, 2, 1], KS = 16;
+  for (let y = 0; y < 28; y++) for (let x = 0; x < 28; x++){
+    let s2 = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
+      const yy = y + dy, xx = x + dx;
+      const v = (yy < 0 || yy > 27 || xx < 0 || xx > 27) ? 0 : px[yy * 28 + xx];
+      s2 += v * K[(dy + 1) * 3 + (dx + 1)];
+    }
+    bl[y * 28 + x] = s2 / KS;
+  }
+  px = bl;
+
+  // ガンマでインク量を合わせる（線が太すぎ／細すぎを吸収）
+  let glo = 0.2, ghi = 5.0;
+  for (let it = 0; it < 24; it++){
+    const gm = (glo + ghi) / 2;
+    let ink = 0;
+    for (let i = 0; i < 784; i++) ink += Math.pow(px[i], gm);
+    ink /= 784;
+    if (ink > INK_TARGET) glo = gm; else ghi = gm;
+  }
+  const gm = (glo + ghi) / 2;
+  for (let i = 0; i < 784; i++) px[i] = Math.pow(px[i], gm);
+
+  // 重心を (14, 14) へ（整数シフト）
+  let sum = 0, cy = 0, cxm = 0;
+  for (let y = 0; y < 28; y++) for (let x = 0; x < 28; x++){
+    const v = px[y * 28 + x]; sum += v; cy += v * y; cxm += v * x;
+  }
+  if (sum > 1e-6){
+    const sy = Math.round(14 - cy / sum), sx = Math.round(14 - cxm / sum);
+    if (sy || sx){
+      const sh = new Float32Array(784);
+      for (let y = 0; y < 28; y++) for (let x = 0; x < 28; x++){
+        const oy = y - sy, ox = x - sx;
+        sh[y * 28 + x] = (oy < 0 || oy > 27 || ox < 0 || ox > 27) ? 0 : px[oy * 28 + ox];
+      }
+      px = sh;
+    }
+  }
+  return px;
+}
+
+const m2 = mapper(document.getElementById('map2'));
+let star = null;
+document.getElementById('send').addEventListener('click', () => {
+  const x = preprocess();
+  if (!x){ alert('先に数字を書いてください'); return; }
+  const z = encode(x);
+  star = project(z);
+  drawMap(m2, null, star);
+  showDigit(document.getElementById('norm'), x);
+  showDigit(document.getElementById('recon'), decode(z));
+  const rk = knn(z, 15);
+  document.getElementById('verdict').textContent = rk[0][0];
+  document.getElementById('conf').textContent =
+    'まわりにある本物データの ' + Math.round(rk[0][1] * 100) + '% がこの数字でした';
+  const box = document.getElementById('ranks'); box.innerHTML = '';
+  rk.slice(0, 3).forEach(r => {
+    const d1 = document.createElement('div');
+    d1.className = 'kv';
+    d1.innerHTML = '<span>' + r[0] + '</span><span>' + Math.round(r[1] * 100) + '%</span>';
+    const b = document.createElement('div'); b.className = 'bar';
+    const f = document.createElement('div'); f.style.width = (r[1] * 100) + '%';
+    b.appendChild(f); box.appendChild(d1); box.appendChild(b);
+  });
+});
+document.getElementById('clear').addEventListener('click', () => {
+  clearPad(); star = null; drawMap(m2, null, null);
+  document.getElementById('verdict').textContent = '—';
+  document.getElementById('ranks').innerHTML = '';
+});
+
+// ── ③ モーフィング ──────────────────────────────────────────
+const proto = [];               // 各数字の代表 z（同じラベルの平均）
+for (let d = 0; d < 10; d++){
+  const z = new Float32Array(ZD); let n = 0;
+  for (let i = 0; i < SN; i++) if (SY[i] === d){
+    for (let j = 0; j < ZD; j++) z[j] += SZ[i * ZD + j];
+    n++;
+  }
+  for (let j = 0; j < ZD; j++) z[j] /= n;
+  proto.push(z);
+}
+const selA = document.getElementById('selA'), selB = document.getElementById('selB');
+for (let d = 0; d < 10; d++){
+  selA.appendChild(new Option(d, d)); selB.appendChild(new Option(d, d));
+}
+selA.value = 3; selB.value = 8;
+function mixZ(t){
+  const a = proto[+selA.value], b = proto[+selB.value], z = new Float32Array(ZD);
+  for (let i = 0; i < ZD; i++) z[i] = (1 - t) * a[i] + t * b[i];
+  return z;
+}
+function updateMorph(){
+  const t = +document.getElementById('slider').value / 100;
+  document.getElementById('mt').textContent = Math.round(t * 100);
+  showDigit(document.getElementById('morph'), decode(mixZ(t)));
+  const st = document.getElementById('strip'), g = st.getContext('2d');
+  g.fillStyle = '#0d1015'; g.fillRect(0, 0, st.width, st.height);
+  const N = 9, w = st.width / N;
+  for (let i = 0; i < N; i++){
+    const tmp = document.createElement('canvas'); tmp.width = tmp.height = 56;
+    showDigit(tmp, decode(mixZ(i / (N - 1))));
+    g.drawImage(tmp, i * w + 2, 2, w - 4, st.height - 4);
+  }
+}
+['input', 'change'].forEach(ev => {
+  document.getElementById('slider').addEventListener(ev, updateMorph);
+  selA.addEventListener(ev, updateMorph); selB.addEventListener(ev, updateMorph);
+});
+
+// ── タブ ────────────────────────────────────────────────────
+[['tab1','p1'],['tab2','p2'],['tab3','p3'],['tab4','p4']].forEach((pair, i, all) => {
+  document.getElementById(pair[0]).addEventListener('click', () => {
+    all.forEach(q => {
+      document.getElementById(q[0]).classList.toggle('on', q[0] === pair[0]);
+      document.getElementById(q[1]).classList.toggle('on', q[1] === pair[1]);
+    });
+  });
+});
+
+// ── 起動 ────────────────────────────────────────────────────
+const lg = document.getElementById('legend');
+COL.forEach((c, i) => {
+  const s = document.createElement('span');
+  s.innerHTML = '<i style="background:' + c + '"></i>' + i; lg.appendChild(s);
+});
+setTimeout(() => {
+  buildBackground();
+  drawMap(m1, null, null); drawMap(m2, null, null);
+  showDigit(document.getElementById('big'), decode(planeZ(0, 0)));
+  document.getElementById('zpos').textContent = '(0.00, 0.00)';
+  document.getElementById('guess').textContent = '中央';
+  document.getElementById('accv').textContent = Math.round(M.accuracy * 1000) / 10 + ' %';
+  document.getElementById('varv').textContent =
+    '8次元のうち ' + Math.round((M.pca.var[0] + M.pca.var[1]) * 100) + '% ぶん';
+  updateMorph();
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('p1').classList.add('on');
+}, 30);
+</script>
+<script>
+// 画面全体の表示倍率（プロジェクタ投影用）。Ctrl+マウスホイールと同じ効果を常設ボタンに。
+(function(){
+  let z = parseFloat(localStorage.getItem('demoZoom') || '1');
+  function apply(){
+    document.body.style.zoom = z;
+    document.getElementById('zval').textContent = Math.round(z * 100) + '%';
+    localStorage.setItem('demoZoom', z);
+  }
+  document.getElementById('zin').onclick  = () => { z = Math.min(2.5, z + 0.1); apply(); };
+  document.getElementById('zout').onclick = () => { z = Math.max(0.6, z - 0.1); apply(); };
+  addEventListener('keydown', e => {
+    if (e.key === '+' || e.key === '=') { z = Math.min(2.5, z + 0.1); apply(); }
+    if (e.key === '-') { z = Math.max(0.6, z - 0.1); apply(); }
+    if (e.key === '0') { z = 1; apply(); }
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

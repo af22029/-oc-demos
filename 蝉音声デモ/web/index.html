@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>蝉ミキサー</title>
+<style>
+  :root{--bg:#12151b;--panel:#1b1f28;--line:#2c323f;--fg:#e9edf5;--sub:#9aa6bb;--accent:#7ee787;--accent2:#ffb86b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:"Segoe UI","Yu Gothic UI",sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--line)}
+  h1{margin:0;font-size:30px}
+  header p{margin:6px 0 0;color:var(--sub);font-size:18px}
+  .tabs{display:flex;gap:8px;padding:12px 24px 0}
+  .tabs button{background:var(--panel);color:var(--sub);border:1px solid var(--line);border-bottom:none;
+    padding:12px 22px;border-radius:8px 8px 0 0;font-size:19px;cursor:pointer}
+  .tabs button.on{color:var(--fg);background:#232936;border-color:var(--accent)}
+  .page{display:none;padding:20px 24px 40px;border-top:1px solid var(--line)}
+  .page.on{display:block}
+  .wrap{display:flex;gap:24px;flex-wrap:wrap}
+  canvas{background:#0d1015;border:1px solid var(--line);border-radius:10px;touch-action:none;cursor:crosshair}
+  .side{min-width:340px;flex:1}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .card h2{margin:0 0 10px;font-size:19px;color:var(--accent)}
+  .kv{display:flex;justify-content:space-between;font-size:18px;padding:6px 0;border-bottom:1px dashed var(--line)}
+  .kv span:last-child{font-variant-numeric:tabular-nums}
+  img#spec{width:100%;border-radius:6px;border:1px solid var(--line);display:block}
+  .hint{color:var(--sub);font-size:17px;line-height:1.75}
+  input[type=range]{width:100%}
+  .big{font-size:64px;font-weight:700;color:var(--accent2);font-variant-numeric:tabular-nums}
+  button.play{background:var(--accent);color:#0d1015;border:0;border-radius:8px;padding:10px 20px;
+    font-size:19px;font-weight:700;cursor:pointer}
+  .axis{color:var(--sub);font-size:16px;margin-top:8px}
+  .zoombar{position:fixed;top:10px;right:14px;display:flex;gap:6px;align-items:center;z-index:99}
+  .zoombar button{background:var(--panel);color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:6px 12px;font-size:16px;font-weight:700;cursor:pointer}
+  .zoombar span{color:var(--sub);font-size:13px;min-width:44px;text-align:center}
+</style>
+</head>
+<body>
+<div class="zoombar">
+  <button id="zout" title="小さく">A－</button><span id="zval">100%</span><button id="zin" title="大きく">A＋</button>
+</div>
+<header>
+  <h1>蝉ミキサー — AIがつくる「セミの声の地図」</h1>
+  <p>芝浦工業大学 武藤研究室 / ComplexSpecVAE-GAN による蝉の鳴き声合成デモ</p>
+</header>
+
+<div class="tabs">
+  <button id="tab1" class="on">① 声の地図</button>
+  <button id="tab2">② モーフィング</button>
+  <button id="tab3">③ しくみ</button>
+</div>
+
+<section id="p1" class="page on">
+  <div class="wrap">
+    <div>
+      <canvas id="map" width="660" height="660"></canvas>
+      <div class="axis">● 白い点＝本物の録音がある場所 ／ ■ 格子＝AIが作った音（クリックで再生）</div>
+    </div>
+    <div class="side">
+      <div class="card">
+        <h2>いま鳴らしている音</h2>
+        <div class="kv"><span>場所</span><span id="pos">—</span></div>
+        <div class="kv"><span>鳴き声のリズム</span><span id="pulse">—</span></div>
+        <div class="kv"><span>音の高さ（重心）</span><span id="cent">—</span></div>
+        <div class="kv"><span>高音成分の割合</span><span id="band">—</span></div>
+      </div>
+      <div class="card">
+        <h2>スペクトログラム（音の設計図）</h2>
+        <img id="spec" alt="スペクトログラム">
+      </div>
+      <div class="card hint">
+        AIは録音を貼り合わせているのではなく、蝉の声を <b>8個の数字</b> で表す「地図」を学んでいます。
+        ここではその地図を2次元に押しつぶして表示しています。<br>
+        地図の上をクリックすると、<b>どこにも録音が存在しない場所</b>の蝉の声もAIが作り出します。
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="p2" class="page">
+  <div class="wrap">
+    <div class="side">
+      <div class="card">
+        <h2>蝉A → 蝉B へ連続変化</h2>
+        <div class="big"><span id="mt">0</span>%</div>
+        <input id="slider" type="range" min="0" max="20" value="0">
+        <p class="hint">左端＝蝉A（本物の録音から取り出した数字）、右端＝蝉B。
+          その間はすべて <b>存在しない蝉</b>。スライダーを少しずつ動かして、声がなめらかに変わるのを聞いてください。</p>
+        <button class="play" id="mplay">▶ 再生</button>
+      </div>
+      <div class="card">
+        <div class="kv"><span>鳴き声のリズム</span><span id="mpulse">—</span></div>
+        <div class="kv"><span>音の高さ（重心）</span><span id="mcent">—</span></div>
+      </div>
+    </div>
+    <div class="side">
+      <canvas id="mcanvas" width="560" height="260"></canvas>
+      <div class="axis">モーフィング中のリズムの変化</div>
+    </div>
+  </div>
+</section>
+
+<section id="p3" class="page">
+  <div class="card hint" style="max-width:760px">
+    <h2>このデモのしくみ</h2>
+    <p>① 実際に録音した蝉の声を <b>スペクトログラム</b>（時間×周波数の画像）に変換します。<br>
+       ② VAE というAIが、その画像を <b>たった8個の数字</b> に圧縮する方法と、8個の数字から画像を復元する方法を同時に学びます。<br>
+       ③ GAN という「本物かニセモノかを見破る審査員AI」と競わせて、より本物らしい画像を作れるように鍛えます。<br>
+       ④ できた画像を <b>ISTFT</b> という計算で音の波（波形）に戻します。</p>
+    <p>8個の数字は好きに決められるので、<b>録音していない蝉の声</b>を無限に作れます。これが「声の地図」の正体です。</p>
+    <p style="color:var(--sub)">※ このデモの音はすべて学習済みモデル model_4000 が生成したものです（本物の録音は含まれていません）。</p>
+  </div>
+</section>
+
+<script src="data/map.js"></script>
+<script>
+const M = window.MAP, G = M.grid;
+const cv = document.getElementById('map'), cx = cv.getContext('2d');
+const PAD = 30, S = (cv.width - PAD * 2) / (G - 1);
+const audio = new Audio();
+let sel = null;
+
+const xr = [Math.min.apply(null, M.xs), Math.max.apply(null, M.xs)];
+const yr = [Math.min.apply(null, M.ys), Math.max.apply(null, M.ys)];
+const px = v => PAD + (v - xr[0]) / (xr[1] - xr[0]) * (cv.width - PAD * 2);
+const py = v => cv.height - PAD - (v - yr[0]) / (yr[1] - yr[0]) * (cv.height - PAD * 2);
+const pulses = M.cells.map(c => c.pulse_hz);
+const pmin = Math.min.apply(null, pulses), pmax = Math.max.apply(null, pulses);
+
+function color(c){
+  const t = (c.pulse_hz - pmin) / (pmax - pmin + 1e-9);
+  return 'hsl(' + (200 - 160 * t) + ' 70% ' + (28 + 26 * t) + '%)';
+}
+function draw(){
+  cx.clearRect(0, 0, cv.width, cv.height);
+  M.cells.forEach(c => {
+    cx.fillStyle = color(c);
+    cx.fillRect(px(c.x) - S / 2, py(c.y) - S / 2, S - 1, S - 1);
+  });
+  cx.fillStyle = 'rgba(255,255,255,.55)';
+  M.real_points.forEach(p => {
+    if (p[0] < xr[0] || p[0] > xr[1] || p[1] < yr[0] || p[1] > yr[1]) return;
+    cx.beginPath(); cx.arc(px(p[0]), py(p[1]), 2.5, 0, 7); cx.fill();
+  });
+  if (sel){
+    cx.strokeStyle = '#7ee787'; cx.lineWidth = 3;
+    cx.strokeRect(px(sel.x) - S / 2, py(sel.y) - S / 2, S - 1, S - 1);
+  }
+}
+function pick(ev){
+  const r = cv.getBoundingClientRect();
+  const mx = (ev.clientX - r.left) * cv.width / r.width;
+  const my = (ev.clientY - r.top) * cv.height / r.height;
+  let best = null, bd = 1e9;
+  M.cells.forEach(c => {
+    const d = Math.pow(px(c.x) - mx, 2) + Math.pow(py(c.y) - my, 2);
+    if (d < bd){ bd = d; best = c; }
+  });
+  if (!best || best === sel && !audio.paused) { sel = best; draw(); return; }
+  sel = best; draw();
+  audio.src = best.wav; audio.loop = true; audio.play();
+  document.getElementById('pos').textContent = '(' + (best.ix + 1) + ', ' + (best.iy + 1) + ')';
+  document.getElementById('pulse').textContent = best.pulse_hz + ' 回/秒';
+  document.getElementById('cent').textContent = (best.centroid / 1000).toFixed(1) + ' kHz';
+  document.getElementById('band').textContent = (best.band_hi * 100).toFixed(0) + ' %';
+  document.getElementById('spec').src = best.png;
+}
+cv.addEventListener('pointerdown', pick);
+cv.addEventListener('pointermove', e => { if (e.buttons) pick(e); });
+draw();
+
+const mc = document.getElementById('mcanvas'), mx2 = mc.getContext('2d');
+const maudio = new Audio(); maudio.loop = true;
+const mplay = document.getElementById('mplay');
+function drawMorph(k){
+  const P = M.morph.map(m => m.pulse_hz);
+  const lo = Math.min.apply(null, P), hi = Math.max.apply(null, P);
+  mx2.clearRect(0, 0, mc.width, mc.height);
+  mx2.strokeStyle = '#7ee787'; mx2.lineWidth = 2; mx2.beginPath();
+  P.forEach((v, i) => {
+    const X = 20 + i * (mc.width - 40) / (P.length - 1);
+    const Y = mc.height - 20 - (v - lo) / (hi - lo + 1e-9) * (mc.height - 40);
+    i ? mx2.lineTo(X, Y) : mx2.moveTo(X, Y);
+  });
+  mx2.stroke();
+  const X = 20 + k * (mc.width - 40) / (P.length - 1);
+  mx2.strokeStyle = '#ffb86b'; mx2.beginPath(); mx2.moveTo(X, 10); mx2.lineTo(X, mc.height - 10); mx2.stroke();
+}
+function setMorph(k){
+  const m = M.morph[k];
+  document.getElementById('mt').textContent = Math.round(m.t * 100);
+  document.getElementById('mpulse').textContent = m.pulse_hz + ' 回/秒';
+  document.getElementById('mcent').textContent = (m.centroid / 1000).toFixed(1) + ' kHz';
+  const playing = !maudio.paused;
+  maudio.src = m.wav; if (playing) maudio.play();
+  drawMorph(k);
+}
+document.getElementById('slider').addEventListener('input', e => setMorph(+e.target.value));
+mplay.addEventListener('click', () => {
+  if (maudio.paused){ maudio.play(); mplay.textContent = '■ 停止'; }
+  else { maudio.pause(); mplay.textContent = '▶ 再生'; }
+});
+setMorph(0);
+
+[['tab1','p1'],['tab2','p2'],['tab3','p3']].forEach((pair, i, all) => {
+  document.getElementById(pair[0]).addEventListener('click', () => {
+    all.forEach(q => {
+      document.getElementById(q[0]).classList.toggle('on', q[0] === pair[0]);
+      document.getElementById(q[1]).classList.toggle('on', q[1] === pair[1]);
+    });
+    audio.pause(); maudio.pause(); mplay.textContent = '▶ 再生';
+  });
+});
+</script>
+<script>
+// 画面全体の表示倍率（プロジェクタ投影用）。Ctrl+マウスホイールと同じ効果を常設ボタンに。
+(function(){
+  let z = parseFloat(localStorage.getItem('demoZoom') || '1');
+  function apply(){
+    document.body.style.zoom = z;
+    document.getElementById('zval').textContent = Math.round(z * 100) + '%';
+    localStorage.setItem('demoZoom', z);
+  }
+  document.getElementById('zin').onclick  = () => { z = Math.min(2.5, z + 0.1); apply(); };
+  document.getElementById('zout').onclick = () => { z = Math.max(0.6, z - 0.1); apply(); };
+  addEventListener('keydown', e => {
+    if (e.key === '+' || e.key === '=') { z = Math.min(2.5, z + 0.1); apply(); }
+    if (e.key === '-') { z = Math.max(0.6, z - 0.1); apply(); }
+    if (e.key === '0') { z = 1; apply(); }
+  });
+  apply();
+})();
+</script>
+</body>
+</html>

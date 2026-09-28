@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>歌声のつくりかた</title>
+<style>
+  :root{--bg:#12151b;--panel:#1b1f28;--line:#2c323f;--fg:#e9edf5;--sub:#9aa6bb;
+        --accent:#7ee787;--accent2:#ffb86b;--rule:#7bb8ff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:"Segoe UI","Yu Gothic UI",sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--line)}
+  h1{margin:0;font-size:30px}
+  header p{margin:6px 0 0;color:var(--sub);font-size:18px}
+  .tabs{display:flex;gap:8px;padding:12px 24px 0}
+  .tabs button{background:var(--panel);color:var(--sub);border:1px solid var(--line);border-bottom:none;
+    padding:12px 22px;border-radius:8px 8px 0 0;font-size:19px;cursor:pointer}
+  .tabs button.on{color:var(--fg);background:#232936;border-color:var(--accent)}
+  .page{display:none;padding:20px 24px 40px;border-top:1px solid var(--line)}
+  .page.on{display:block}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+  .card h2{margin:0 0 12px;font-size:19px;color:var(--accent)}
+  .hint{color:var(--sub);font-size:17px;line-height:1.75}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  button{background:var(--accent);color:#0d1015;border:0;border-radius:8px;padding:12px 22px;
+    font-size:18px;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;color:var(--sub);border:1px solid var(--line)}
+  button.song{font-size:19px}
+  button.song.on{outline:3px solid var(--accent2)}
+  .track{margin-top:18px}
+  .track .head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px}
+  .track .name{font-size:19px;font-weight:700}
+  .track .name .dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px}
+  .track.rule .dot{background:var(--rule)} .track.model .dot{background:var(--accent)}
+  .track.real .dot{background:var(--accent2)}
+  .wavewrap{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;
+    background:#0b0e13;margin-bottom:6px}
+  .wavewrap canvas{display:block;width:100%;height:78px}
+  .wavewrap.active{border-color:var(--accent)}
+  .specwrap{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0b0e13}
+  .specwrap img{display:block;width:100%;height:150px;object-fit:fill}
+  .specwrap.active{border-color:var(--accent)}
+  .play-head{position:absolute;top:0;bottom:0;width:2px;background:#fff;opacity:.85;left:0;display:none}
+  .transport{display:flex;align-items:center;gap:14px;margin-top:16px;padding-top:14px;
+    border-top:1px solid var(--line)}
+  .transport input[type=range]{flex:1;accent-color:var(--accent);height:26px}
+  .transport button{padding:8px 16px;min-width:52px}
+  .time{font-family:Consolas,monospace;font-size:17px;color:var(--sub);
+    font-variant-numeric:tabular-nums;min-width:64px;text-align:center}
+  .axis{color:var(--sub);font-size:15px;margin-top:4px;display:flex;justify-content:space-between}
+  .big{font-size:22px;font-weight:700}
+  footer{padding:18px 24px 40px;color:var(--sub);font-size:15px;border-top:1px solid var(--line)}
+  .zoombar{position:fixed;top:10px;right:14px;display:flex;gap:6px;align-items:center;z-index:99}
+  .zoombar button{background:var(--panel);color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:6px 12px;font-size:16px}
+  .zoombar span{color:var(--sub);font-size:13px;min-width:44px;text-align:center}
+</style>
+</head>
+<body>
+<div class="zoombar">
+  <button id="zout">A－</button><span id="zval">100%</span><button id="zin">A＋</button>
+</div>
+
+<header>
+  <h1>歌声のつくりかた — ルール vs 学習</h1>
+  <p>芝浦工業大学 武藤研究室 / 同じ楽譜を「人が決めた規則」と「データから学んだAI」で歌わせる</p>
+</header>
+
+<div class="tabs">
+  <button id="tab1" class="on">① 楽譜を歌わせる</button>
+  <button id="tab2">② 本物と比べる</button>
+  <button id="tab3">③ しくみ</button>
+</div>
+
+<section id="p1" class="page on">
+  <div class="card">
+    <h2>曲をえらぶ</h2>
+    <div class="row" id="songlist"></div>
+    <p class="hint" id="songinfo"></p>
+    <div class="row" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+      <button class="ghost" id="pickust">📄 USTファイルを読み込む</button>
+      <input type="file" id="ustfile" accept=".ust,.txt" style="display:none">
+      <span class="hint" id="uststatus">UTAU で作った楽譜をその場で歌わせます</span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>聴きくらべる</h2>
+    <p class="hint">どちらかを再生中にもう片方を押すと、<b>同じ位置のまま声だけが入れ替わります</b>。
+      楽譜も音の高さもまったく同じ。違うのは「口の中の形をどう決めたか」だけです。<br>
+      上が<b>波形</b>（音の大きさの変化）、下が<b>スペクトログラム</b>（どの高さの音が含まれるか）。<br>
+      シークバーでも、波形やスペクトログラムを直接クリックしても頭出しできます。</p>
+    <div id="tracks"></div>
+  </div>
+</section>
+
+<section id="p2" class="page">
+  <div class="card">
+    <h2>本物の歌声と、それを真似たAI</h2>
+    <div class="row" id="reallist"></div>
+    <p class="hint" id="realinfo"></p>
+  </div>
+  <div class="card">
+    <p class="hint">AIには<b>歌詞と音の高さだけ</b>を教えてあります。本物の録音は聴かせていません。
+      それでも似た響きになるのは、AIが「この音を、この高さで歌うとどうなるか」を
+      27分ぶんの歌から学んだからです。<br>
+      スペクトログラムを見くらべると、<b>本物のほうが細かい揺らぎが多い</b>のが分かります。
+      その揺らぎこそが「人間らしさ」の正体です。</p>
+    <div id="realtracks"></div>
+  </div>
+</section>
+
+<section id="p3" class="page">
+  <div class="card hint" style="max-width:860px">
+    <h2>2つの声のつくりかた</h2>
+    <p><b>共通</b>：UST（楽譜）から「歌詞のかな→音素」「音符→周波数」を計算し、
+      ビブラートとポルタメントを付けた音の高さの線を作ります。
+      最後は同じボコーダ（WORLD）で音の波に戻します。</p>
+    <p><b>① ルールベース</b>：「あ」なら共鳴を850Hz・1200Hz・2800Hzに置く…という
+      <b>人が決めた表</b>を引いて口の中の形を作ります。データは1秒も使っていません。</p>
+    <p><b>② 学習モデル</b>：同じ場面で、<b>ニューラルネットが形を予測</b>します。
+      27分の歌声から「音素と高さ→響き」の対応を学習済み。表は一切持っていません。</p>
+    <p>つまり2つの音の違いは、まるごと<b>「口の中の形をどう決めたか」</b>の違いです。</p>
+    <div class="row" style="margin-top:16px">
+      <div class="big">784 → 60</div>
+      <div class="hint">スペクトルの形を60個の数字で表現（メルケプストラム）</div>
+    </div>
+    <p style="margin-top:16px">なお AI が予測するのは<b>音色だけ</b>で、音の高さは楽譜から決めています。
+      波形そのものを作らせない（＝位相を扱わない）ことで、少ないデータでも壊れない設計にしています。</p>
+  </div>
+</section>
+
+<footer id="credit"></footer>
+
+<script src="data/songs.js"></script>
+<script>
+const S = window.SONGS;
+let players = {};    // method -> Audio（トラックごとに1つ持ち、切り替えは再生権の受け渡しだけ）
+let cur = null;      // {set, method, prefix, sec}
+let pos = 0;         // 再生位置（秒）
+let dragging = false;
+let playing = false;
+
+const WAVE_COLOR = {rule: '#7bb8ff', model: '#7ee787', real: '#ffb86b'};
+const fmt = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0') +
+                 '.' + Math.floor((t % 1) * 10);
+
+function trackHTML(prefix, key, method, t){
+  return '<div class="track ' + method + '" id="' + prefix + '-' + method + '">' +
+    '<div class="head">' +
+      '<div class="name"><span class="dot"></span>' + t.label + '</div>' +
+      '<button data-m="' + method + '">▶ 再生</button>' +
+    '</div>' +
+    '<div class="wavewrap" data-m="' + method + '">' +
+      '<canvas class="wave" width="1200" height="160"></canvas>' +
+      '<div class="play-head"></div></div>' +
+    '<div class="specwrap" data-m="' + method + '"><img src="' + t.png + '" alt="スペクトログラム">' +
+      '<div class="play-head"></div></div>' +
+  '</div>';
+}
+function transportHTML(prefix, sec){
+  return '<div class="transport">' +
+    '<button id="' + prefix + '-pp" class="ghost">▶</button>' +
+    '<span class="time" id="' + prefix + '-cur">0:00.0</span>' +
+    '<input type="range" id="' + prefix + '-seek" min="0" max="1000" value="0" step="1">' +
+    '<span class="time">' + fmt(sec) + '</span>' +
+  '</div>';
+}
+function drawWave(canvas, peaks, color){
+  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, mid = H / 2;
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(0, mid - 1, W, 1);
+  g.fillStyle = color;
+  const n = peaks.length, bw = W / n;
+  for (let i = 0; i < n; i++){
+    const h = peaks[i] / 255 * (mid - 3);
+    g.fillRect(i * bw, mid - h, Math.max(1, bw - 0.4), h * 2);
+  }
+}
+
+function renderSet(set, boxId, prefix){
+  Object.values(players).forEach(a => { a.pause(); a.src = ''; });   // 前の曲を片付ける
+  players = {}; playing = false; pos = 0; cur = null;
+
+  const box = document.getElementById(boxId);
+  const ms = Object.keys(set.tracks);
+  const sec = set.tracks[ms[0]].sec;
+  box.innerHTML = ms.map(m => trackHTML(prefix, set.key, m, set.tracks[m])).join('')
+                + transportHTML(prefix, sec);
+
+  ms.forEach(m => {
+    const t = set.tracks[m];
+    const a = new Audio(t.wav);          // 2つとも先に読み込む＝切り替えが一瞬で済む
+    a.preload = 'auto';
+    a.addEventListener('ended', () => { playing = false; pos = 0; refresh(); });
+    players[m] = a;
+
+    const row = document.getElementById(prefix + '-' + m);
+    const cv = row.querySelector('canvas.wave');
+    if (cv && t.peaks) drawWave(cv, t.peaks, WAVE_COLOR[m] || '#7ee787');
+    row.querySelector('button').onclick = () => {
+      if (cur && cur.method === m){ playing ? pause() : play(); }
+      else { switchTo(set, m, prefix); play(); }
+    };
+    row.querySelectorAll('.wavewrap,.specwrap').forEach(w => {
+      const grab = e => {
+        const r = w.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+        if (!cur || cur.method !== m) switchTo(set, m, prefix);
+        seek(ratio * cur.sec);
+      };
+      w.addEventListener('pointerdown', e => { w.setPointerCapture(e.pointerId); grab(e); });
+      w.addEventListener('pointermove', e => { if (e.buttons) grab(e); });
+    });
+  });
+
+  const seekEl = document.getElementById(prefix + '-seek');
+  seekEl.addEventListener('pointerdown', () => { dragging = true; });
+  ['pointerup', 'pointercancel', 'change'].forEach(ev =>
+    seekEl.addEventListener(ev, () => { dragging = false; }));
+  seekEl.addEventListener('input', () => { if (cur) seek(+seekEl.value / 1000 * cur.sec); });
+  document.getElementById(prefix + '-pp').onclick = () => (playing ? pause() : play());
+
+  switchTo(set, ms[0], prefix);          // 先頭トラックを選択（再生はしない）
+  refresh();
+}
+
+function switchTo(set, method, prefix){
+  const t = set.tracks[method];
+  if (cur && players[cur.method]){
+    const old = players[cur.method];
+    pos = old.currentTime || pos;        // いまの位置を引き継ぐ
+    old.pause();
+  }
+  cur = {set: set, method: method, prefix: prefix, sec: t.sec};
+  const a = players[method];
+  applyPos(a);
+  if (playing) a.play().catch(() => {});  // 鳴っていたらそのまま続ける
+  refresh();
+}
+function applyPos(a){
+  if (!a || !cur) return;
+  pos = Math.min(Math.max(0, pos), cur.sec - 0.02);
+  const t = pos;
+  if (a.readyState >= 1){ try { a.currentTime = t; } catch (e) {} }
+  else a.addEventListener('loadedmetadata',
+                          () => { try { a.currentTime = t; } catch (e) {} }, {once: true});
+}
+function play(){
+  if (!cur) return;
+  const a = players[cur.method];
+  applyPos(a);
+  playing = true;
+  a.play().catch(() => {});
+  refresh();
+}
+function pause(){
+  if (!cur) return;
+  const a = players[cur.method];
+  pos = a.currentTime || pos;
+  a.pause(); playing = false; refresh();
+}
+function stopAll(){
+  Object.values(players).forEach(a => a.pause());
+  playing = false; refresh();
+}
+function seek(t){
+  if (!cur) return;
+  pos = Math.min(Math.max(0, t), cur.sec - 0.02);
+  applyPos(players[cur.method]);
+  updateHeads();
+}
+function refresh(){
+  document.querySelectorAll('.track button').forEach(b => b.textContent = '▶ 再生');
+  document.querySelectorAll('.specwrap,.wavewrap').forEach(w => w.classList.remove('active'));
+  if (!cur) return;
+  const row = document.getElementById(cur.prefix + '-' + cur.method);
+  if (!row) return;
+  row.querySelector('button').textContent = playing ? '■ 停止' : '▶ 再生';
+  row.querySelectorAll('.wavewrap,.specwrap').forEach(w => w.classList.add('active'));
+  const pp = document.getElementById(cur.prefix + '-pp');
+  if (pp) pp.textContent = playing ? '■' : '▶';
+  updateHeads();
+}
+function updateHeads(){
+  if (!cur) return;
+  const a = players[cur.method];
+  const t = dragging ? pos : (a && a.currentTime ? a.currentTime : pos);
+  const x = (t / cur.sec * 100) + '%';
+  const row = document.getElementById(cur.prefix + '-' + cur.method);
+  if (!row) return;
+  row.parentElement.querySelectorAll('.play-head')
+     .forEach(h => { h.style.display = 'block'; h.style.left = x; });
+  const seekEl = document.getElementById(cur.prefix + '-seek');
+  if (seekEl && !dragging) seekEl.value = Math.round(t / cur.sec * 1000);
+  const curEl = document.getElementById(cur.prefix + '-cur');
+  if (curEl) curEl.textContent = fmt(t);
+}
+function tick(){
+  requestAnimationFrame(tick);
+  if (cur && playing && !dragging){
+    const a = players[cur.method];
+    if (a && !a.paused){ pos = a.currentTime; updateHeads(); }
+  }
+}
+requestAnimationFrame(tick);
+
+// 曲リスト
+const sl = document.getElementById('songlist');
+S.songs.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.className = 'song' + (i === 0 ? ' on' : '');
+  b.textContent = s.title;
+  b.onclick = () => {
+    sl.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    document.getElementById('songinfo').textContent = s.note + '／' + s.notes + '音符';
+    renderSet(s, 'tracks', 'a');
+  };
+  sl.appendChild(b);
+});
+document.getElementById('songinfo').textContent = S.songs[0].note + '／' + S.songs[0].notes + '音符';
+renderSet(S.songs[0], 'tracks', 'a');
+
+// 本物リスト
+const rl = document.getElementById('reallist');
+S.reals.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.className = 'song' + (i === 0 ? ' on' : '');
+  b.textContent = s.title;
+  b.onclick = () => {
+    rl.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    document.getElementById('realinfo').textContent = s.note;
+    renderSet(s, 'realtracks', 'b');
+  };
+  rl.appendChild(b);
+});
+if (S.reals.length){
+  document.getElementById('realinfo').textContent = S.reals[0].note;
+  renderSet(S.reals[0], 'realtracks', 'b');
+}
+document.getElementById('credit').textContent = S.credit;
+
+// ── 自分の UST を読み込んで合成（engine/serve.py 起動時のみ）──────────
+const pick = document.getElementById('pickust');
+const filein = document.getElementById('ustfile');
+const status = document.getElementById('uststatus');
+const LIVE = location.protocol.startsWith('http');
+if (!LIVE){
+  pick.disabled = true; pick.style.opacity = .45;
+  status.textContent = 'この機能を使うには engine/serve.py を起動してください（python engine/serve.py）';
+}
+pick.onclick = () => filein.click();
+filein.onchange = async () => {
+  const f = filein.files[0];
+  if (!f) return;
+  status.textContent = f.name + ' を合成中…（数秒）';
+  pick.disabled = true;
+  try{
+    const res = await fetch('/render', {
+      method: 'POST',
+      headers: {'X-Filename': encodeURIComponent(f.name)},
+      body: await f.arrayBuffer()
+    });
+    const j = await res.json();
+    if (j.error) throw new Error(j.error);
+    const b = document.createElement('button');
+    b.className = 'song';
+    b.textContent = '📄 ' + f.name.replace(/\.ust$/i, '');
+    b.onclick = () => {
+      sl.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      document.getElementById('songinfo').textContent = j.note;
+      renderSet(j, 'tracks', 'a');
+    };
+    sl.appendChild(b);
+    b.click();
+    status.textContent = f.name + ' を読み込みました（' + j.notes + '音符）';
+  }catch(e){
+    status.textContent = '読み込めませんでした：' + e.message;
+  }
+  pick.disabled = false;
+  filein.value = '';
+};
+
+// タブ・表示倍率
+[['tab1','p1'],['tab2','p2'],['tab3','p3']].forEach((pair, i, all) => {
+  document.getElementById(pair[0]).onclick = () => {
+    stopAll();
+    all.forEach(q => {
+      document.getElementById(q[0]).classList.toggle('on', q[0] === pair[0]);
+      document.getElementById(q[1]).classList.toggle('on', q[1] === pair[1]);
+    });
+  };
+});
+(function(){
+  let z = parseFloat(localStorage.getItem('demoZoom') || '1');
+  function apply(){
+    document.body.style.zoom = z;
+    document.getElementById('zval').textContent = Math.round(z * 100) + '%';
+    localStorage.setItem('demoZoom', z);
+  }
+  document.getElementById('zin').onclick  = () => { z = Math.min(2.5, z + 0.1); apply(); };
+  document.getElementById('zout').onclick = () => { z = Math.max(0.6, z - 0.1); apply(); };
+  apply();
+})();
+</script>
+</body>
+</html>

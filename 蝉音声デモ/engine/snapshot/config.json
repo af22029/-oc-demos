@@ -1,0 +1,88 @@
+{
+  "_comment": "PLAN B: ComplexSpecVAE-GAN 設定ファイル",
+  "_note": "PC切り替え時は paths.work_dir のみ変更すること",
+  "paths": {
+    "work_dir": "D:\\GAN V3",
+    "_work_dir_school": "（学校PC例）C:\\Users\\muto\\Desktop\\GAN V3",
+    "data_wav48k": "data\\wav48k",
+    "checkpoints": "checkpoints",
+    "z_vectors": "checkpoints\\z_vectors.npy",
+    "z_sequences": "checkpoints\\z_sequences.npy",
+    "generated": "generated",
+    "evaluation": "evaluation"
+  },
+  "audio": {
+    "target_sr": 48000
+  },
+  "stft": {
+    "n_fft": 1024,
+    "hop_length": 256,
+    "win_length": 1024,
+    "segment_sec": 3,
+    "_comment_seg": "Step3: full-length切り替え済み（--full_length フラグで有効化）",
+    "max_frames": 4608,
+    "_comment_frames": "check_max_frames.py 確認済み：最長24.27秒=4550フレーム → 4608に設定（Step3 full-length用）"
+  },
+  "model": {
+    "latent_dim": 8,
+    "_comment_latent": "V3.5: 16→8に戻す（T_seq=9により総次元=8×9=72。latent_dim=16実験は失敗確定）",
+    "t_seq": 9,
+    "_comment_tseq": "Sequence Latent の時間ステップ数。9×2^6=576≥563で既存ConvTranspose構造と整合",
+    "leaky_relu_slope": 0.1
+  },
+  "training": {
+    "batch_size": 16,
+    "_comment_batch": "Step1: 16。Step3 full-length再開時は4に下げる（RTX5080 17GB）",
+    "lr_gen": 0.0002,
+    "lr_disc": 0.0001,
+    "adam_b1": 0.8,
+    "adam_b2": 0.99,
+    "lr_decay": 0.9995,
+    "epochs": 4000,
+    "checkpoint_interval": 100,
+    "kl_beta": 0.05,
+    "_comment_kl": "V3 Global Latent の元設定（0.05）に戻す。SC Loss 追加実験用",
+    "kl_warmup_epochs": 100,
+    "warmup_epochs": 300,
+    "_comment_warmup": "warmup中はGAN損失なし。再構成+KLのみ",
+    "lambda_recon": 15.0,
+    "lambda_stft": 3.0,
+    "_comment_stft": "multi-resolution STFT lossの重み",
+    "lambda_sc": 0.0,
+    "_comment_sc": "Spectral Convergence Loss の重み（||X_r-X_g||_F / ||X_r||_F）autocorr崩壊のため無効化",
+    "lambda_sc_centroid": 1.0,
+    "_comment_sc_centroid": "スペクトル重心直接損失の重み。平均+std一致。freqs正規化済みで損失≈0.03相当"
+  },
+  "discriminator": {
+    "resolutions": [
+      [
+        512,
+        128,
+        512
+      ],
+      [
+        1024,
+        256,
+        1024
+      ],
+      [
+        2048,
+        512,
+        2048
+      ]
+    ],
+    "_comment": "multi-resolution STFT loss用の[n_fft, hop_length, win_length]"
+  },
+  "augmentation": {
+    "enabled": false,
+    "_comment": "最初は必ずfalse。AM構造確認後も基本不要",
+    "time_mask_param": 50,
+    "freq_mask_param": 30,
+    "num_time_masks": 1,
+    "num_freq_masks": 1
+  },
+  "inference": {
+    "n_samples": 20,
+    "save_wav": true
+  }
+}

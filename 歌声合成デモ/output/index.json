@@ -1,0 +1,42 @@
+[
+  {
+    "key": "chouchou",
+    "title": "ちょうちょ",
+    "note": "ドイツ民謡",
+    "group": "demo",
+    "notes": 14,
+    "sec": 9.45,
+    "transpose": 0,
+    "ust": "D:\\歌声合成デモ_高校生向け\\songs\\chouchou.ust"
+  },
+  {
+    "key": "kaeru",
+    "title": "かえるのうた",
+    "note": "ドイツ民謡",
+    "group": "demo",
+    "notes": 32,
+    "sec": 16.91,
+    "transpose": 0,
+    "ust": "D:\\歌声合成デモ_高校生向け\\songs\\kaeru.ust"
+  },
+  {
+    "key": "kirakira",
+    "title": "きらきら星",
+    "note": "フランス民謡／自動で -2 半音移調",
+    "group": "demo",
+    "notes": 22,
+    "sec": 15.0,
+    "transpose": -2,
+    "ust": "D:\\歌声合成デモ_高校生向け\\songs\\kirakira.ust"
+  },
+  {
+    "key": "scale",
+    "title": "音階とあいうえお",
+    "note": "母音の違いを見る用／自動で -5 半音移調",
+    "group": "demo",
+    "notes": 14,
+    "sec": 12.5,
+    "transpose": -5,
+    "ust": "D:\\歌声合成デモ_高校生向け\\songs\\scale.ust"
+  }
+]

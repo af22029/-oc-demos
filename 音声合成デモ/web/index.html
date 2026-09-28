@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>声のつくりかた</title>
+<style>
+  :root{--bg:#12151b;--panel:#1b1f28;--line:#2c323f;--fg:#e9edf5;--sub:#9aa6bb;
+        --accent:#7ee787;--accent2:#ffb86b;--f1:#ff7b7b;--f2:#7bb8ff;--f3:#c89bff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:"Segoe UI","Yu Gothic UI",sans-serif}
+  header{padding:18px 24px;border-bottom:1px solid var(--line)}
+  h1{margin:0;font-size:30px}
+  header p{margin:6px 0 0;color:var(--sub);font-size:18px}
+  .tabs{display:flex;gap:8px;padding:12px 24px 0}
+  .tabs button{background:var(--panel);color:var(--sub);border:1px solid var(--line);border-bottom:none;
+    padding:12px 22px;border-radius:8px 8px 0 0;font-size:19px;cursor:pointer}
+  .tabs button.on{color:var(--fg);background:#232936;border-color:var(--accent)}
+  .page{display:none;padding:20px 24px 40px;border-top:1px solid var(--line)}
+  .page.on{display:block}
+  .wrap{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+  .wrap.two{flex-wrap:nowrap}
+  .wrap.two .side{min-width:0;flex:1 1 320px}
+  canvas{background:#0b0e13;border:1px solid var(--line);border-radius:10px;
+    touch-action:none;max-width:100%;height:auto;display:block}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:14px}
+  .card h2{margin:0 0 12px;font-size:19px;color:var(--accent)}
+  .hint{color:var(--sub);font-size:17px;line-height:1.75}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  button{background:var(--accent);color:#0d1015;border:0;border-radius:8px;padding:12px 22px;
+    font-size:19px;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;color:var(--sub);border:1px solid var(--line)}
+  button.vowel{min-width:64px;font-size:26px;padding:10px 14px}
+  button.vowel.on{outline:3px solid var(--accent2)}
+  .slider{margin:14px 0}
+  .slider label{display:flex;justify-content:space-between;font-size:17px;margin-bottom:4px}
+  .slider label b{font-family:"Consolas",monospace;font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:middle}
+  .kv{display:flex;justify-content:space-between;font-size:18px;padding:6px 0;border-bottom:1px dashed var(--line)}
+  small.cap{color:var(--sub);font-size:16px;display:block;margin-top:6px}
+  .zoombar{position:fixed;top:10px;right:14px;display:flex;gap:6px;align-items:center;z-index:99}
+  .zoombar button{background:var(--panel);color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:6px 12px;font-size:16px;font-weight:700}
+  .zoombar span{color:var(--sub);font-size:13px;min-width:44px;text-align:center}
+  @media (max-width:1100px){.wrap.two{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div class="zoombar">
+  <button id="zout" title="小さく">A－</button><span id="zval">100%</span><button id="zin" title="大きく">A＋</button>
+</div>
+
+<header>
+  <h1>声のつくりかた — フォルマント合成</h1>
+  <p>芝浦工業大学 武藤研究室 / 人の声を「ブザー＋フィルタ」から組み立てる体験デモ</p>
+</header>
+
+<div class="tabs">
+  <button id="tab1" class="on">① 母音をつくる</button>
+  <button id="tab2">② 母音の地図</button>
+  <button id="tab3">③ しくみ</button>
+</div>
+
+<!-- ① -->
+<section id="p1" class="page on">
+  <div class="wrap two">
+    <div class="side" style="flex:2 1 560px">
+      <canvas id="spec" width="820" height="380"></canvas>
+      <small class="cap">リアルタイムのスペクトログラム（縦＝音の高さ／横＝時間）。
+        横線が <span class="sw" style="background:var(--f1)"></span>F1
+        <span class="sw" style="background:var(--f2)"></span>F2
+        <span class="sw" style="background:var(--f3)"></span>F3 の位置。</small>
+
+      <div class="card" style="margin-top:16px">
+        <div class="row">
+          <button id="play">▶ 鳴らす</button>
+          <button class="ghost" id="vib">ビブラート：切</button>
+          <button class="ghost" id="breath">息成分：切</button>
+          <span class="hint">スペースキーでも鳴らせます</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>口の形を選ぶ</h2>
+        <div class="row">
+          <button class="vowel" data-v="a">あ</button>
+          <button class="vowel" data-v="i">い</button>
+          <button class="vowel" data-v="u">う</button>
+          <button class="vowel" data-v="e">え</button>
+          <button class="vowel" data-v="o">お</button>
+        </div>
+        <p class="hint">押すとF1・F2・F3が同時に動きます。<b>声帯の音は何も変えていません</b>——
+          変えたのは通り道の共鳴だけです。</p>
+      </div>
+
+      <div class="card">
+        <h2>声帯（音のもと）</h2>
+        <div class="slider">
+          <label>声の高さ F0 <b><span id="f0v">130</span> Hz</b></label>
+          <input type="range" id="f0" min="70" max="400" value="130">
+        </div>
+        <p class="hint">動かしても<b>「あ」は「あ」のまま</b>。声の高さと声色は別物だと分かります。</p>
+      </div>
+
+      <div class="card">
+        <h2>のど・口の共鳴（フォルマント）</h2>
+        <div class="slider">
+          <label><span><span class="sw" style="background:var(--f1)"></span>F1（あごの開き）</span><b><span id="f1v">850</span> Hz</b></label>
+          <input type="range" id="f1" min="200" max="1000" value="850">
+        </div>
+        <div class="slider">
+          <label><span><span class="sw" style="background:var(--f2)"></span>F2（舌の前後）</span><b><span id="f2v">1200</span> Hz</b></label>
+          <input type="range" id="f2" min="600" max="3000" value="1200">
+        </div>
+        <div class="slider">
+          <label><span><span class="sw" style="background:var(--f3)"></span>F3（声の個性）</span><b><span id="f3v">2800</span> Hz</b></label>
+          <input type="range" id="f3" min="2000" max="3800" value="2800">
+        </div>
+        <p class="hint">F1とF2の2つだけで、日本語の母音はほぼ決まります。ゆっくり動かすと
+          「あ→え→い」と<b>勝手に聞こえてくる</b>のが面白いところ。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ② -->
+<section id="p2" class="page">
+  <div class="wrap two">
+    <div class="side">
+      <canvas id="chart" width="560" height="460"></canvas>
+      <small class="cap">母音図（横＝F2／縦＝F1、どちらも右・下ほど低い）。
+        白丸＝日本語5母音の代表値、★＝いま鳴らしている音。ドラッグで動かせます。</small>
+    </div>
+    <div class="side">
+      <div class="card">
+        <h2>いま鳴っている声</h2>
+        <div class="kv"><span>F0（声の高さ）</span><span id="c0">—</span></div>
+        <div class="kv"><span>F1</span><span id="c1">—</span></div>
+        <div class="kv"><span>F2</span><span id="c2">—</span></div>
+        <div class="kv"><span>いちばん近い母音</span><span id="cv">—</span></div>
+      </div>
+      <div class="card hint">
+        日本語の5母音は、この平面の上で<b>五角形</b>に並びます。
+        「い」と「う」は縦（F1）が近く、横（F2）で分かれている——つまり
+        <b>あごの開き方は同じで、舌の位置だけが違う</b>ということです。
+        <br><br>母音の間の<b>誰も発音しない場所</b>にも★を置けます。外国語の母音がそこに入ります。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ③ -->
+<section id="p3" class="page">
+  <div class="card hint" style="max-width:820px">
+    <h2>このデモのしくみ — ソース・フィルタ理論</h2>
+    <p>人の声は、2つの部品でできています。</p>
+    <p><b>① 音のもと（ソース）＝ 声帯</b><br>
+      声帯は1秒に100〜300回ふるえて、<b>ブザーのような音</b>を出します。この振動数が「声の高さ」。
+      この音だけを聞いても、まだ「あ」でも「い」でもありません。</p>
+    <p><b>② 通り道（フィルタ）＝ のどと口</b><br>
+      その音がのど・口・鼻を通るとき、<b>特定の高さだけが強く響きます</b>。
+      これがフォルマント（F1・F2・F3）。口の形を変えると響く場所が動き、同じブザー音が
+      「あ」にも「い」にも聞こえます。</p>
+    <p>このデモは、①を <b>パルス列</b>、②を <b>3個の共振フィルタ</b> で置き換えたものです。
+      たったそれだけで母音に聞こえるという事実が、この理論の証拠になっています。</p>
+    <div class="kv"><span>音のもと</span><span>パルス列（倍音を含むブザー）</span></div>
+    <div class="kv"><span>フィルタ</span><span>バンドパス3本（F1／F2／F3）</span></div>
+    <div class="kv"><span>使っている技術</span><span>Web Audio API のみ・録音データ0バイト</span></div>
+    <p style="margin-top:14px">このデモには<b>人の声の録音が1つも入っていません</b>。
+      すべて計算で作った音です。次の段階では、ここに<b>実際の歌声から学習したモデル</b>を足して、
+      同じ楽譜を「ルールで作った声」と「データから学んだ声」で歌い比べます。</p>
+  </div>
+</section>
+
+<script>
+// ── 音声合成エンジン（ソース・フィルタ）─────────────────────
+let ctx = null, osc = null, noise = null, master = null, ana = null;
+let bands = [], noiseGains = [], playing = false;
+let vibOn = false, breathOn = false, vibLFO = null, vibGain = null;
+
+const VOWELS = {
+  a: {f: [ 850, 1200, 2800], label: 'あ'},
+  i: {f: [ 300, 2700, 3300], label: 'い'},
+  u: {f: [ 380, 1150, 2600], label: 'う'},
+  e: {f: [ 500, 2300, 2900], label: 'え'},
+  o: {f: [ 450,  800, 2700], label: 'お'}
+};
+const BW = [80, 90, 130];          // 各フォルマントの帯域幅
+const AMP = [1.0, 0.55, 0.28];     // 高い共鳴ほど弱く
+
+const state = {f0: 130, f: [850, 1200, 2800]};
+
+function buildPulseWave(ac){
+  // 声帯パルス列：倍音を 1/n で並べた周期波形
+  const N = 40, real = new Float32Array(N), imag = new Float32Array(N);
+  for (let n = 1; n < N; n++) imag[n] = 1 / n;
+  return ac.createPeriodicWave(real, imag, {disableNormalization: false});
+}
+function makeNoiseBuffer(ac){
+  const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+function start(){
+  if (playing) return;
+  if (!ctx){
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = 0;
+    ana = ctx.createAnalyser(); ana.fftSize = 2048; ana.smoothingTimeConstant = 0.35;
+    master.connect(ana); master.connect(ctx.destination);
+  }
+  ctx.resume();
+
+  osc = ctx.createOscillator();
+  osc.setPeriodicWave(buildPulseWave(ctx));
+  osc.frequency.value = state.f0;
+
+  noise = ctx.createBufferSource();
+  noise.buffer = makeNoiseBuffer(ctx); noise.loop = true;
+
+  // ビブラート（F0を6Hzで揺らす）
+  vibLFO = ctx.createOscillator(); vibLFO.frequency.value = 5.5;
+  vibGain = ctx.createGain(); vibGain.gain.value = vibOn ? state.f0 * 0.03 : 0;
+  vibLFO.connect(vibGain); vibGain.connect(osc.frequency);
+
+  bands = []; noiseGains = [];
+  for (let i = 0; i < 3; i++){
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = state.f[i];
+    bp.Q.value = state.f[i] / BW[i];
+    const g = ctx.createGain(); g.gain.value = AMP[i];
+    osc.connect(bp); bp.connect(g); g.connect(master);
+    bands.push(bp);
+
+    const ng = ctx.createGain(); ng.gain.value = breathOn ? 0.06 : 0;
+    noise.connect(ng); ng.connect(bp);
+    noiseGains.push(ng);
+  }
+  osc.start(); noise.start(); vibLFO.start();
+  master.gain.setTargetAtTime(0.32, ctx.currentTime, 0.02);
+  playing = true;
+  document.getElementById('play').textContent = '■ 止める';
+}
+function stop(){
+  if (!playing) return;
+  const t = ctx.currentTime;
+  master.gain.setTargetAtTime(0, t, 0.03);
+  const o = osc, n = noise, v = vibLFO;
+  setTimeout(() => { try{ o.stop(); n.stop(); v.stop(); }catch(e){} }, 250);
+  playing = false;
+  document.getElementById('play').textContent = '▶ 鳴らす';
+}
+function applyF(i, hz, glide){
+  state.f[i] = hz;
+  if (playing && bands[i]){
+    bands[i].frequency.setTargetAtTime(hz, ctx.currentTime, glide ? 0.04 : 0.008);
+    bands[i].Q.setTargetAtTime(hz / BW[i], ctx.currentTime, 0.02);
+  }
+  document.getElementById('f' + (i + 1)).value = hz;
+  document.getElementById('f' + (i + 1) + 'v').textContent = Math.round(hz);
+}
+function applyF0(hz){
+  state.f0 = hz;
+  if (playing && osc) osc.frequency.setTargetAtTime(hz, ctx.currentTime, 0.02);
+  if (vibGain) vibGain.gain.value = vibOn ? hz * 0.03 : 0;
+  document.getElementById('f0v').textContent = Math.round(hz);
+}
+
+// ── UI ───────────────────────────────────────────────────────
+document.getElementById('play').onclick = () => playing ? stop() : start();
+addEventListener('keydown', e => {
+  if (e.code === 'Space' && !e.repeat && !/INPUT|SELECT/.test(e.target.tagName)){
+    e.preventDefault(); playing ? stop() : start();
+  }
+});
+document.getElementById('vib').onclick = e => {
+  vibOn = !vibOn;
+  e.target.textContent = 'ビブラート：' + (vibOn ? '入' : '切');
+  e.target.classList.toggle('ghost', !vibOn);
+  if (vibGain) vibGain.gain.value = vibOn ? state.f0 * 0.03 : 0;
+};
+document.getElementById('breath').onclick = e => {
+  breathOn = !breathOn;
+  e.target.textContent = '息成分：' + (breathOn ? '入' : '切');
+  e.target.classList.toggle('ghost', !breathOn);
+  noiseGains.forEach(g => { if (g) g.gain.value = breathOn ? 0.06 : 0; });
+};
+document.getElementById('f0').oninput = e => applyF0(+e.target.value);
+[1, 2, 3].forEach(i => {
+  document.getElementById('f' + i).oninput = e => {
+    applyF(i - 1, +e.target.value, false);
+    markVowel(null);
+  };
+});
+document.querySelectorAll('.vowel').forEach(b => {
+  b.onclick = () => {
+    const v = VOWELS[b.dataset.v];
+    v.f.forEach((hz, i) => applyF(i, hz, true));
+    markVowel(b.dataset.v);
+    if (!playing) start();
+  };
+});
+function markVowel(key){
+  document.querySelectorAll('.vowel').forEach(b => b.classList.toggle('on', b.dataset.v === key));
+}
+
+// ── スペクトログラム ──────────────────────────────────────────
+const spec = document.getElementById('spec'), sctx = spec.getContext('2d');
+sctx.fillStyle = '#0b0e13'; sctx.fillRect(0, 0, spec.width, spec.height);
+const FMAX = 4500;
+function colormap(v){                       // 0-255 → 暗紫〜橙〜白
+  const t = v / 255;
+  const r = Math.min(255, Math.round(255 * Math.pow(t, 0.6)));
+  const g = Math.min(255, Math.round(300 * Math.pow(Math.max(0, t - 0.25), 0.9)));
+  const b = Math.min(255, Math.round(180 * Math.pow(Math.max(0, t - 0.55), 0.8) + 60 * t));
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+function drawSpec(){
+  requestAnimationFrame(drawSpec);
+  const W = spec.width, H = spec.height;
+  sctx.drawImage(spec, -2, 0);              // 左へ2pxスクロール
+  sctx.fillStyle = '#0b0e13'; sctx.fillRect(W - 2, 0, 2, H);
+
+  if (playing && ana){
+    const buf = new Uint8Array(ana.frequencyBinCount);
+    ana.getByteFrequencyData(buf);
+    const nyq = ctx.sampleRate / 2, bins = buf.length;
+    for (let y = 0; y < H; y++){
+      const hz = (1 - y / H) * FMAX;
+      const bi = Math.round(hz / nyq * bins);
+      const v = buf[Math.min(bins - 1, bi)];
+      if (v > 8){ sctx.fillStyle = colormap(v); sctx.fillRect(W - 2, y, 2, 1); }
+    }
+  }
+  // フォルマントの位置に横線
+  const cols = ['--f1', '--f2', '--f3'];
+  const cs = getComputedStyle(document.documentElement);
+  state.f.forEach((hz, i) => {
+    if (hz > FMAX) return;
+    const y = Math.round((1 - hz / FMAX) * H);
+    sctx.fillStyle = cs.getPropertyValue(cols[i]).trim();
+    sctx.globalAlpha = 0.55; sctx.fillRect(0, y, W, 1); sctx.globalAlpha = 1;
+  });
+  // 周波数目盛り
+  sctx.fillStyle = 'rgba(233,237,245,.45)'; sctx.font = '13px Consolas,monospace';
+  for (let hz = 1000; hz <= 4000; hz += 1000){
+    const y = (1 - hz / FMAX) * H;
+    sctx.fillText((hz / 1000) + 'k', 6, y - 4);
+  }
+  drawChart();
+}
+requestAnimationFrame(drawSpec);
+
+// ── 母音図 ───────────────────────────────────────────────────
+const chart = document.getElementById('chart'), cctx = chart.getContext('2d');
+const F2R = [3000, 600], F1R = [200, 1000], CP = 46;   // F2は右ほど低い
+const cx2 = f2 => CP + (F2R[0] - f2) / (F2R[0] - F2R[1]) * (chart.width - CP * 2);
+const cy1 = f1 => CP + (f1 - F1R[0]) / (F1R[1] - F1R[0]) * (chart.height - CP * 2);
+const ix2 = p => F2R[0] - (p - CP) / (chart.width - CP * 2) * (F2R[0] - F2R[1]);
+const iy1 = p => F1R[0] + (p - CP) / (chart.height - CP * 2) * (F1R[1] - F1R[0]);
+
+function nearestVowel(){
+  let best = null, bd = 1e9;
+  for (const k in VOWELS){
+    const v = VOWELS[k];
+    const d = Math.pow((v.f[0] - state.f[0]) / 300, 2) + Math.pow((v.f[1] - state.f[1]) / 900, 2);
+    if (d < bd){ bd = d; best = v; }
+  }
+  return bd < 0.35 ? best.label : 'どの母音でもない音';
+}
+function drawChart(){
+  const W = chart.width, H = chart.height;
+  cctx.fillStyle = '#0b0e13'; cctx.fillRect(0, 0, W, H);
+  cctx.strokeStyle = '#232936'; cctx.lineWidth = 1;
+  for (let f2 = 3000; f2 >= 600; f2 -= 400){
+    cctx.beginPath(); cctx.moveTo(cx2(f2), CP); cctx.lineTo(cx2(f2), H - CP); cctx.stroke();
+    cctx.fillStyle = '#5c6779'; cctx.font = '13px Consolas,monospace';
+    cctx.fillText(f2, cx2(f2) - 14, H - CP + 20);
+  }
+  for (let f1 = 200; f1 <= 1000; f1 += 200){
+    cctx.beginPath(); cctx.moveTo(CP, cy1(f1)); cctx.lineTo(W - CP, cy1(f1)); cctx.stroke();
+    cctx.fillStyle = '#5c6779'; cctx.fillText(f1, 8, cy1(f1) + 4);
+  }
+  cctx.fillStyle = '#9aa6bb'; cctx.font = '15px "Segoe UI",sans-serif';
+  cctx.fillText('F2（舌の前後）→ 低い', W - 190, H - 12);
+  cctx.save(); cctx.translate(16, H / 2 + 60); cctx.rotate(-Math.PI / 2);
+  cctx.fillText('F1（あごの開き）→ 大きい', 0, 0); cctx.restore();
+
+  // 5母音
+  for (const k in VOWELS){
+    const v = VOWELS[k], x = cx2(v.f[1]), y = cy1(v.f[0]);
+    cctx.strokeStyle = 'rgba(233,237,245,.7)'; cctx.lineWidth = 2;
+    cctx.beginPath(); cctx.arc(x, y, 11, 0, 7); cctx.stroke();
+    cctx.fillStyle = '#e9edf5'; cctx.font = 'bold 20px "Yu Gothic UI",sans-serif';
+    cctx.textAlign = 'center'; cctx.textBaseline = 'middle';
+    cctx.fillText(v.label, x, y + 26);
+  }
+  // 現在位置
+  const x = cx2(Math.min(F2R[0], Math.max(F2R[1], state.f[1])));
+  const y = cy1(Math.min(F1R[1], Math.max(F1R[0], state.f[0])));
+  cctx.fillStyle = '#ffb86b'; cctx.font = 'bold 30px serif';
+  cctx.fillText('★', x, y);
+  cctx.textAlign = 'left'; cctx.textBaseline = 'alphabetic';
+
+  document.getElementById('c0').textContent = Math.round(state.f0) + ' Hz';
+  document.getElementById('c1').textContent = Math.round(state.f[0]) + ' Hz';
+  document.getElementById('c2').textContent = Math.round(state.f[1]) + ' Hz';
+  document.getElementById('cv').textContent = nearestVowel();
+}
+function chartPick(ev){
+  const r = chart.getBoundingClientRect();
+  const px = (ev.clientX - r.left) * chart.width / r.width;
+  const py = (ev.clientY - r.top) * chart.height / r.height;
+  applyF(1, Math.round(Math.min(3000, Math.max(600, ix2(px)))), false);
+  applyF(0, Math.round(Math.min(1000, Math.max(200, iy1(py)))), false);
+  markVowel(null);
+  if (!playing) start();
+}
+chart.addEventListener('pointerdown', chartPick);
+chart.addEventListener('pointermove', e => { if (e.buttons) chartPick(e); });
+
+// ── タブ・表示倍率 ───────────────────────────────────────────
+[['tab1','p1'],['tab2','p2'],['tab3','p3']].forEach((pair, i, all) => {
+  document.getElementById(pair[0]).onclick = () => {
+    all.forEach(q => {
+      document.getElementById(q[0]).classList.toggle('on', q[0] === pair[0]);
+      document.getElementById(q[1]).classList.toggle('on', q[1] === pair[1]);
+    });
+  };
+});
+(function(){
+  let z = parseFloat(localStorage.getItem('demoZoom') || '1');
+  function apply(){
+    document.body.style.zoom = z;
+    document.getElementById('zval').textContent = Math.round(z * 100) + '%';
+    localStorage.setItem('demoZoom', z);
+  }
+  document.getElementById('zin').onclick  = () => { z = Math.min(2.5, z + 0.1); apply(); };
+  document.getElementById('zout').onclick = () => { z = Math.max(0.6, z - 0.1); apply(); };
+  apply();
+})();
+markVowel('a');
+</script>
+</body>
+</html>
